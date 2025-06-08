@@ -1,5 +1,5 @@
 import random
-from .mmr import get_mmr
+from mmr import get_mmr
 
 class MatchmakingQueue:
     def __init__(self):

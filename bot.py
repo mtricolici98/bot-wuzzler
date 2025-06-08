@@ -4,11 +4,13 @@ from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
 from flask import Flask, request
 from matchmaking import MatchmakingQueue
-from mmr import get_mmr, set_mmr, update_mmr
+from mmr import update_mmr
 
+# Create an unverified SSL context
 load_dotenv()
 
-app = App(token=os.environ["SLACK_BOT_TOKEN"], signing_secret=os.environ["SLACK_SIGNING_SECRET"])
+app = App(token=os.environ["SLACK_BOT_TOKEN"], signing_secret=os.environ["SLACK_SIGNING_SECRET"],
+          ssl_check_enabled=False, url_verification_enabled=False)
 flask_app = Flask(__name__)
 handler = SlackRequestHandler(app)
 queue = MatchmakingQueue()
