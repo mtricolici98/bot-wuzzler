@@ -31,6 +31,9 @@ class MatchmakingQueue:
     def get_active_match(self):
         return self.active_match
 
+    def queue_size(self):
+        return len(self.queue)
+
 def balance_teams(players):
     # Simple team balancing by MMR
     mmrs = [(p, get_mmr(p)) for p in players]

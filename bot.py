@@ -26,7 +26,8 @@ def handle_wuzzler_command(ack, respond, command):
                 app.client.chat_postMessage(channel=p, text=msg)
             respond("Game ready! Check your DM for teams.")
         else:
-            respond("Looking for game! Waiting for more players...")
+            num = queue.queue_size()
+            respond(f"Looking for game! Waiting for more players... ({num}/4 in queue)")
     elif text == "cancel":
         queue.remove_player(user_id)
         respond("You have been removed from matchmaking.")
