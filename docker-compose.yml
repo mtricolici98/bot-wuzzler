@@ -5,8 +5,10 @@ services:
     container_name: wuzzler-bot
     env_file:
       - .env
+    environment:
+      - MMR_DB_PATH=/app/db/mmr.db
     volumes:
-      - mmr_db_data:/app/mmr.db
+      - mmr_db_data:/app/db
     restart: unless-stopped
 
 volumes:

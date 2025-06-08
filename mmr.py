@@ -1,9 +1,10 @@
 # Simple in-memory MMR storage and calculation
 
+import os
 import sqlite3
 from contextlib import contextmanager
 
-DB_PATH = 'mmr.db'
+DB_PATH = os.environ.get("MMR_DB_PATH", "/app/db/mmr.db")
 DEFAULT_MMR = 1000
 
 @contextmanager
