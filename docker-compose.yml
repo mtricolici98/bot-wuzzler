@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  wuzzler-bot:
+    build: .
+    container_name: wuzzler-bot
+    env_file:
+      - .env
+    volumes:
+      - mmr_db_data:/app/mmr.db
+    restart: unless-stopped
+
+volumes:
+  mmr_db_data:
