@@ -26,6 +26,13 @@ def handle_lfg(user_id, respond, test_mode=False):
     else:
         num = queue.queue_size()
         respond(f"Looking for game! Waiting for more players... ({num}/4 in queue)")
+        try:
+            app.client.chat_postMessage(
+                channel="#wuzzler-plus",
+                text=f"<@{user_id}> is looking for a table soccer game! Use /wuzzler lfg to join. ({num}/4 in queue)"
+            )
+        except Exception:
+            pass
 
 def handle_cancel(user_id, respond):
     queue.remove_player(user_id)
