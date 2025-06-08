@@ -1,8 +1,7 @@
 import os
 from dotenv import load_dotenv
 from slack_bolt import App
-from slack_bolt.adapter.flask import SlackRequestHandler
-from flask import Flask, request
+from slack_bolt.adapter.socket_mode import SocketModeHandler
 from matchmaking import MatchmakingQueue
 from mmr import update_mmr
 
@@ -11,8 +10,6 @@ load_dotenv()
 
 app = App(token=os.environ["SLACK_BOT_TOKEN"], signing_secret=os.environ["SLACK_SIGNING_SECRET"],
           ssl_check_enabled=False, url_verification_enabled=False)
-flask_app = Flask(__name__)
-handler = SlackRequestHandler(app)
 queue = MatchmakingQueue()
 
 
@@ -80,10 +77,6 @@ def finalize_match(match):
     queue.active_match = None
 
 
-@flask_app.route("/slack/events", methods=["POST"])
-def slack_events():
-    return handler.handle(request)
-
-
 if __name__ == "__main__":
-    flask_app.run(port=3000)
+    handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
+    handler.start()
