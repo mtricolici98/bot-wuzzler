@@ -18,12 +18,19 @@ def handle_wuzzler_command(ack, respond, command):
     ack()
     text = command.get("text", "").strip()
     user_id = command["user_id"]
-    if text == "lfg":
+    if text == "lfg" or text == "lfg test":
+        # Add fake users for testing if 'test' is present
+        if text == "lfg test":
+            fake_users = ["U_FAKE1", "U_FAKE2", "U_FAKE3"]
+            for fake in fake_users:
+                queue.add_player(fake)
         match = queue.add_player(user_id)
         if match:
             msg = format_match_message(match)
             for p in match['players']:
-                app.client.chat_postMessage(channel=p, text=msg)
+                # Only DM real users
+                if not p.startswith("U_FAKE"):
+                    app.client.chat_postMessage(channel=p, text=msg)
             respond("Game ready! Check your DM for teams.")
         else:
             num = queue.queue_size()
