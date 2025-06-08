@@ -51,7 +51,15 @@ def handle_set_score(user_id, respond, team, score):
     # Only finalize if both scores are set
     if match['scores']['A'] is not None and match['scores']['B'] is not None:
         deltas = finalize_match(match)
-        respond(format_mmr_delta_message(deltas))
+        summary = format_mmr_delta_message(deltas)
+        respond(summary)
+        # Send DM to all other users (not the one running the command, and not fake)
+        for uid in deltas:
+            if uid != user_id and not uid.startswith("U_FAKE"):
+                try:
+                    app.client.chat_postMessage(channel=uid, text=summary)
+                except Exception as e:
+                    pass
 
 def handle_stats(user_id, respond):
     mmr = get_mmr(user_id)
@@ -64,13 +72,30 @@ def handle_current(user_id, respond):
     else:
         respond("No active match.")
 
+def handle_help(respond):
+    msg = (
+        "*Wuzzler Bot Commands:*\n"
+        "• `/wuzzler lfg` — Join matchmaking queue\n"
+        "• `/wuzzler lfg test` — Fill queue with fake users for testing\n"
+        "• `/wuzzler cancel` — Leave the matchmaking queue or active match\n"
+        "• `/wuzzler current` — Show the current match (teams and scores)\n"
+        "• `/wuzzler complete` — Show the current match (teams and scores)\n"
+        "• `/wuzzler score a <score>` — Set Team A's score\n"
+        "• `/wuzzler score b <score>` — Set Team B's score and finalize match\n"
+        "• `/wuzzler stats` — Show your current MMR\n"
+        "• `/wuzzler help` — Show this help message\n"
+    )
+    respond(msg)
+
 # --- Main Command Router ---
 @app.command("/wuzzler")
 def handle_wuzzler_command(ack, respond, command):
     ack()
     text = command.get("text", "").strip()
     user_id = command["user_id"]
-    if text == "lfg":
+    if not text or text == "help":
+        handle_help(respond)
+    elif text == "lfg":
         handle_lfg(user_id, respond)
     elif text == "lfg test":
         handle_lfg(user_id, respond, test_mode=True)
@@ -96,7 +121,7 @@ def handle_wuzzler_command(ack, respond, command):
     elif text.startswith("a ") or text.startswith("b "):
         respond("Please use /wuzzler score a <score> or /wuzzler score b <score> instead.")
     else:
-        respond("Unknown command.")
+        respond("Unknown command. Type `/wuzzler help` for usage.")
 
 def format_match_message(match):
     msg = "*Teams:*\n"
