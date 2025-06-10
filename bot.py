@@ -89,6 +89,7 @@ def handle_help(respond):
         "• `/wuzzler complete` — Show the current match (teams and scores)\n"
         "• `/wuzzler score a <score>` — Set Team A's score\n"
         "• `/wuzzler score b <score>` — Set Team B's score and finalize match\n"
+        "• `/wuzzler score both <score_a> <score_b>` — Set both teams' scores\n"
         "• `/wuzzler stats` — Show your current MMR\n"
         "• `/wuzzler help` — Show this help message\n"
         "• `/wuzzler register @teamap1 @teamap2 @teambp1 @teambp2` — Declare a match with explicit users\n"
@@ -174,7 +175,9 @@ def handle_leaderboard(respond):
         if not mmrs:
             respond("No MMR data yet.")
             return
-        top = sorted(mmrs.items(), key=lambda x: x[1], reverse=True)[:10]
+        top = sorted(mmrs.items(), key=lambda x: x[1], reverse=True)
+        # Exclude fake users
+        top = [(uid, mmr) for uid, mmr in top if not uid.startswith('U_FAKE')][:10]
         user_map = {}
         try:
             users = app.client.users_list(limit=1000)["members"]
@@ -220,8 +223,16 @@ def handle_wuzzler_command(ack, respond, command):
                 handle_set_score(user_id, respond, team, score)
             except Exception:
                 respond(f"Invalid score for Team {team}.")
+        elif len(parts) == 4 and parts[1] == "both":
+            try:
+                score_a = int(parts[2])
+                score_b = int(parts[3])
+                handle_set_score(user_id, respond, "A", score_a)
+                handle_set_score(user_id, respond, "B", score_b)
+            except Exception:
+                respond("Invalid score values. Usage: /wuzzler score both <score_a> <score_b>")
         else:
-            respond("Usage: /wuzzler score a <score> or /wuzzler score b <score>")
+            respond("Usage: /wuzzler score a <score> or /wuzzler score b <score> or /wuzzler score both <score_a> <score_b>")
     elif text.startswith("a ") or text.startswith("b "):
         respond("Please use /wuzzler score a <score> or /wuzzler score b <score> instead.")
     elif text.startswith("register"):
