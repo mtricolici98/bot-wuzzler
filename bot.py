@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 from matchmaking import MatchmakingQueue
-from mmr import get_mmr, update_mmr
+from mmr import get_mmr, update_mmr, get_all_mmr
 
 load_dotenv()
 
@@ -92,19 +92,61 @@ def handle_help(respond):
         "• `/wuzzler stats` — Show your current MMR\n"
         "• `/wuzzler help` — Show this help message\n"
         "• `/wuzzler register @teamap1 @teamap2 @teambp1 @teambp2` — Declare a match with explicit users\n"
+        "• `/wuzzler leaderboard` — Show the top 10 players by MMR\n"
     )
     respond(msg)
 
 def handle_register(user_id, respond, text):
-    # Expected: /wuzzler register @teamap1 @teamap2 @teambp1 @teambp2
     import re
-    mentions = re.findall(r'<@([A-Z0-9]+)>', text)
-    if len(mentions) != 4:
-        respond("Usage: /wuzzler register @teamap1 @teamap2 @teambp1 @teambp2")
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("wuzzler.register")
+    logger.info(f"Raw text: {text}")
+    tokens = text.split()[1:]
+    logger.info(f"Tokens: {tokens}")
+    if len(tokens) != 4:
+        respond("Usage: /wuzzler register @teamap1 @teamap2 @teambp1 @teambp2 (use mentions or display names)")
+        logger.warning("Incorrect number of tokens")
         return
-    team_a = [mentions[0], mentions[1]]
-    team_b = [mentions[2], mentions[3]]
-    # Set up the match
+    user_ids = []
+    unresolved = []
+    for token in tokens:
+        m = re.match(r'<@([A-Z0-9]+)>', token)
+        if m:
+            user_ids.append(m.group(1))
+            logger.info(f"Resolved mention: {token} -> {m.group(1)}")
+        elif token.startswith('@'):
+            unresolved.append(token[1:])
+            logger.info(f"Unresolved @name: {token}")
+        else:
+            unresolved.append(token)
+            logger.info(f"Unresolved token: {token}")
+    if unresolved:
+        try:
+            users = app.client.users_list(limit=1000)["members"]
+            display_map = {u["profile"].get("display_name", "").lower(): u["id"] for u in users}
+            realname_map = {u["profile"].get("real_name", "").lower(): u["id"] for u in users}
+            logger.info(f"Attempting to resolve: {unresolved}")
+            for name in unresolved:
+                name_l = name.lower()
+                uid = display_map.get(name_l) or realname_map.get(name_l)
+                if uid:
+                    user_ids.append(uid)
+                    logger.info(f"Resolved {name} to {uid}")
+                else:
+                    respond(f"Could not find user: {name}. Please use Slack mentions or correct display names.")
+                    logger.warning(f"Could not resolve: {name}")
+                    return
+        except Exception as e:
+            respond("Failed to resolve user names. Please use Slack mentions if possible.")
+            logger.error(f"Exception in users_list: {e}")
+            return
+    if len(user_ids) != 4:
+        respond("Could not resolve all users. Please use Slack mentions or correct display names.")
+        logger.warning(f"Final user_ids: {user_ids}")
+        return
+    team_a = [user_ids[0], user_ids[1]]
+    team_b = [user_ids[2], user_ids[3]]
     queue.active_match = {
         'players': team_a + team_b,
         'teams': {'A': team_a, 'B': team_b},
@@ -112,12 +154,40 @@ def handle_register(user_id, respond, text):
     }
     msg = format_match_message(queue.active_match)
     respond(f"Match registered!\n{msg}")
+    logger.info(f"Match registered: {queue.active_match}")
     for p in team_a + team_b:
         if not p.startswith("U_FAKE"):
             try:
                 app.client.chat_postMessage(channel=p, text=f"You have been registered for a match!\n{msg}")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error(f"Failed to DM {p}: {e}")
+
+def handle_leaderboard(respond):
+    from mmr import get_all_mmr
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("wuzzler.leaderboard")
+    try:
+        mmrs = get_all_mmr()
+        if not mmrs:
+            respond("No MMR data yet.")
+            return
+        top = sorted(mmrs.items(), key=lambda x: x[1], reverse=True)[:10]
+        user_map = {}
+        try:
+            users = app.client.users_list(limit=1000)["members"]
+            for u in users:
+                user_map[u["id"]] = u["profile"].get("display_name") or u["profile"].get("real_name") or u["id"]
+        except Exception as e:
+            logger.warning(f"Could not fetch user list: {e}")
+        msg = "*Leaderboard (Top 10 MMR):*\n"
+        for i, (uid, mmr) in enumerate(top, 1):
+            name = user_map.get(uid, uid)
+            msg += f"{i}. {name}: {mmr}\n"
+        respond(msg)
+    except Exception as e:
+        respond("Failed to fetch leaderboard.")
+        logger.error(f"Exception: {e}")
 
 # --- Main Command Router ---
 @app.command("/wuzzler")
@@ -154,6 +224,8 @@ def handle_wuzzler_command(ack, respond, command):
         respond("Please use /wuzzler score a <score> or /wuzzler score b <score> instead.")
     elif text.startswith("register"):
         handle_register(user_id, respond, text)
+    elif text == "leaderboard":
+        handle_leaderboard(respond)
     else:
         respond("Unknown command. Type `/wuzzler help` for usage.")
 

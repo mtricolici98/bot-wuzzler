@@ -31,6 +31,11 @@ def set_mmr(user_id, mmr):
     with get_conn() as conn:
         conn.execute('INSERT OR REPLACE INTO mmr (user_id, mmr) VALUES (?, ?)', (user_id, mmr))
 
+def get_all_mmr():
+    with get_conn() as conn:
+        cur = conn.execute('SELECT user_id, mmr FROM mmr')
+        return dict(cur.fetchall())
+
 def update_mmr(winners, losers, score_diff):
     # Returns a dict of user_id -> (old_mmr, new_mmr, delta)
     K = 32
