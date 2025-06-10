@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 from matchmaking import MatchmakingQueue
-from mmr import get_mmr, update_mmr, get_all_mmr
+from mmr import get_mmr, update_mmr, get_all_mmr, update_mmr_elo, record_history, get_history
 
 load_dotenv()
 
@@ -45,29 +45,6 @@ def handle_complete(user_id, respond):
     else:
         respond("No active match.")
 
-def handle_set_score(user_id, respond, team, score):
-    match = queue.get_active_match()
-    if not match:
-        respond("No active match.")
-        return
-    if match['scores'][team] is not None:
-        respond(f"Score for Team {team} already set.")
-        return
-    match['scores'][team] = score
-    respond(f"Set Team {team} score to {score}.")
-    # Only finalize if both scores are set
-    if match['scores']['A'] is not None and match['scores']['B'] is not None:
-        deltas = finalize_match(match)
-        summary = format_mmr_delta_message(deltas)
-        respond(summary)
-        # Send DM to all other users (not the one running the command, and not fake)
-        for uid in deltas:
-            if uid != user_id and not uid.startswith("U_FAKE"):
-                try:
-                    app.client.chat_postMessage(channel=uid, text=summary)
-                except Exception as e:
-                    pass
-
 def handle_stats(user_id, respond):
     mmr = get_mmr(user_id)
     respond(f"Your current MMR: {mmr}")
@@ -87,13 +64,12 @@ def handle_help(respond):
         "• `/wuzzler cancel` — Leave the matchmaking queue or active match\n"
         "• `/wuzzler current` — Show the current match (teams and scores)\n"
         "• `/wuzzler complete` — Show the current match (teams and scores)\n"
-        "• `/wuzzler score a <score>` — Set Team A's score\n"
-        "• `/wuzzler score b <score>` — Set Team B's score and finalize match\n"
-        "• `/wuzzler score both <score_a> <score_b>` — Set both teams' scores\n"
         "• `/wuzzler stats` — Show your current MMR\n"
+        "• `/wuzzler history` — Show your win/loss record\n"
         "• `/wuzzler help` — Show this help message\n"
         "• `/wuzzler register @teamap1 @teamap2 @teambp1 @teambp2` — Declare a match with explicit users\n"
         "• `/wuzzler leaderboard` — Show the top 10 players by MMR\n"
+        "• `/wuzzler result <a_wins> <b_wins>` — Record match result and update MMR\n"
     )
     respond(msg)
 
@@ -194,6 +170,54 @@ def handle_leaderboard(respond):
         respond("Failed to fetch leaderboard.")
         logger.error(f"Exception: {e}")
 
+def handle_result(user_id, respond, text):
+    # /wuzzler result <a_wins> <b_wins>
+    import logging
+    logger = logging.getLogger("wuzzler.result")
+    parts = text.split()
+    if len(parts) != 3:
+        respond("Usage: /wuzzler result <a_wins> <b_wins>")
+        logger.warning(f"Bad usage: {text}")
+        return
+    try:
+        a_wins = int(parts[1])
+        b_wins = int(parts[2])
+    except Exception:
+        respond("Invalid win counts. Usage: /wuzzler result <a_wins> <b_wins>")
+        logger.warning(f"Bad win counts: {text}")
+        return
+    if not queue.active_match:
+        respond("No active match to complete.")
+        logger.warning("No active match.")
+        return
+    teams = queue.active_match['teams']
+    if a_wins > b_wins:
+        winners = teams['A']
+        losers = teams['B']
+        winner = 'A'
+    elif b_wins > a_wins:
+        winners = teams['B']
+        losers = teams['A']
+        winner = 'B'
+    else:
+        respond("Draws are not supported. There must be a winner.")
+        logger.warning(f"Draw result: {text}")
+        return
+    from mmr import update_mmr_elo, record_history
+    deltas = update_mmr_elo(winners, losers)
+    record_history(winners, losers)
+    msg = f"*Match result:* Team A {a_wins} - Team B {b_wins}\nWinner: Team {winner}\n\nMMR changes:\n"
+    for uid, (old, new, delta) in deltas.items():
+        msg += f"<@{uid}>: {old} → {new} ({'+' if delta > 0 else ''}{delta})\n"
+    respond(msg)
+    logger.info(f"Result processed: {msg}")
+    queue.active_match = None
+
+def handle_history(user_id, respond):
+    from mmr import get_history
+    wins, losses = get_history(user_id)
+    respond(f"Game history for <@{user_id}>:\nWins: {wins}\nLosses: {losses}")
+
 # --- Main Command Router ---
 @app.command("/wuzzler")
 def handle_wuzzler_command(ack, respond, command):
@@ -214,31 +238,16 @@ def handle_wuzzler_command(ack, respond, command):
         handle_stats(user_id, respond)
     elif text == "current":
         handle_current(user_id, respond)
-    elif text.startswith("score "):
-        parts = text.split()
-        if len(parts) == 3 and parts[1] in ("a", "b"):
-            team = parts[1].upper()
-            try:
-                score = int(parts[2])
-                handle_set_score(user_id, respond, team, score)
-            except Exception:
-                respond(f"Invalid score for Team {team}.")
-        elif len(parts) == 4 and parts[1] == "both":
-            try:
-                score_a = int(parts[2])
-                score_b = int(parts[3])
-                handle_set_score(user_id, respond, "A", score_a)
-                handle_set_score(user_id, respond, "B", score_b)
-            except Exception:
-                respond("Invalid score values. Usage: /wuzzler score both <score_a> <score_b>")
-        else:
-            respond("Usage: /wuzzler score a <score> or /wuzzler score b <score> or /wuzzler score both <score_a> <score_b>")
-    elif text.startswith("a ") or text.startswith("b "):
-        respond("Please use /wuzzler score a <score> or /wuzzler score b <score> instead.")
+    elif text.startswith("score"):
+        respond("The score commands have been removed. Please use `/wuzzler result <a_wins> <b_wins>` to record match results.")
     elif text.startswith("register"):
         handle_register(user_id, respond, text)
+    elif text.startswith("result"):
+        handle_result(user_id, respond, text)
     elif text == "leaderboard":
         handle_leaderboard(respond)
+    elif text == "history":
+        handle_history(user_id, respond)
     else:
         respond("Unknown command. Type `/wuzzler help` for usage.")
 
@@ -255,18 +264,6 @@ def format_mmr_delta_message(deltas):
     for user, (old, new, delta) in deltas.items():
         msg += f"<@{user}>: {old} → {new} ({'+' if delta >= 0 else ''}{delta})\n"
     return msg
-
-def finalize_match(match):
-    a_score = match['scores']['A']
-    b_score = match['scores']['B']
-    if a_score is None or b_score is None:
-        return None
-    if a_score > b_score:
-        deltas = update_mmr(match['teams']['A'], match['teams']['B'], a_score - b_score)
-    else:
-        deltas = update_mmr(match['teams']['B'], match['teams']['A'], b_score - a_score)
-    queue.active_match = None
-    return deltas
 
 if __name__ == "__main__":
     handler = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
