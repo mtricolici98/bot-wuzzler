@@ -66,6 +66,7 @@ def handle_help(respond):
         "• `/wuzzler complete` — Show the current match (teams and scores)\n"
         "• `/wuzzler stats` — Show your current MMR\n"
         "• `/wuzzler history` — Show your win/loss record\n"
+        "• `/wuzzler loserboard` — Show the 10 lowest MMRs\n"
         "• `/wuzzler help` — Show this help message\n"
         "• `/wuzzler register @teamap1 @teamap2 @teambp1 @teambp2` — Declare a match with explicit users\n"
         "• `/wuzzler leaderboard` — Show the top 10 players by MMR\n"
@@ -170,6 +171,35 @@ def handle_leaderboard(respond):
         respond("Failed to fetch leaderboard.")
         logger.error(f"Exception: {e}")
 
+def handle_loserboard(respond):
+    from mmr import get_all_mmr
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("wuzzler.loserboard")
+    try:
+        mmrs = get_all_mmr()
+        if not mmrs:
+            respond("No MMR data yet.")
+            return
+        bottom = sorted(mmrs.items(), key=lambda x: x[1])
+        # Exclude fake users
+        bottom = [(uid, mmr) for uid, mmr in bottom if not uid.startswith('U_FAKE')][:10]
+        user_map = {}
+        try:
+            users = app.client.users_list(limit=1000)["members"]
+            for u in users:
+                user_map[u["id"]] = u["profile"].get("display_name") or u["profile"].get("real_name") or u["id"]
+        except Exception as e:
+            logger.warning(f"Could not fetch user list: {e}")
+        msg = "*Loserboard (Lowest 10 MMR):*\n"
+        for i, (uid, mmr) in enumerate(bottom, 1):
+            name = user_map.get(uid, uid)
+            msg += f"{i}. {name}: {mmr}\n"
+        respond(msg)
+    except Exception as e:
+        respond("Failed to fetch loserboard.")
+        logger.error(f"Exception: {e}")
+
 def handle_result(user_id, respond, text):
     # /wuzzler result <a_wins> <b_wins>
     import logging
@@ -246,6 +276,8 @@ def handle_wuzzler_command(ack, respond, command):
         handle_result(user_id, respond, text)
     elif text == "leaderboard":
         handle_leaderboard(respond)
+    elif text == "loserboard":
+        handle_loserboard(respond)
     elif text == "history":
         handle_history(user_id, respond)
     else:
