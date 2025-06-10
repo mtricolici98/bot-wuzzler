@@ -126,15 +126,17 @@ def handle_register(user_id, respond, text):
             users = app.client.users_list(limit=1000)["members"]
             display_map = {u["profile"].get("display_name", "").lower(): u["id"] for u in users}
             realname_map = {u["profile"].get("real_name", "").lower(): u["id"] for u in users}
+            name_map = {u.get("name", "").lower(): u["id"] for u in users}
+            logger.info(f"All Slack usernames: {[u.get('name', '') for u in users]}")
             logger.info(f"Attempting to resolve: {unresolved}")
             for name in unresolved:
                 name_l = name.lower()
-                uid = display_map.get(name_l) or realname_map.get(name_l)
+                uid = display_map.get(name_l) or realname_map.get(name_l) or name_map.get(name_l)
                 if uid:
                     user_ids.append(uid)
                     logger.info(f"Resolved {name} to {uid}")
                 else:
-                    respond(f"Could not find user: {name}. Please use Slack mentions or correct display names.")
+                    respond(f"Could not find user: {name}. Please use Slack mentions or correct display names or Slack handles.")
                     logger.warning(f"Could not resolve: {name}")
                     return
         except Exception as e:
