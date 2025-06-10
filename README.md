@@ -10,6 +10,7 @@
 - `/wuzzler score b <score>` — Set Team B's score and finalize match.
 - `/wuzzler stats` — Show your current MMR.
 - `/wuzzler help` or `/wuzzler` — Show all command usages.
+- `/wuzzler register @teamap1 @teamap2 @teambp1 @teambp2` — Declare a match with explicit users (Team A and Team B).
 
 ## MMR
 - MMR is tracked and updated for each user after every match.
@@ -44,6 +45,7 @@
 - The bot will announce in `#wuzzler-plus` when someone is looking for a game.
 - All MMR adjustments are shown to all players after a match, and DMed to each participant.
 - For development, use `/wuzzler lfg test` to simulate a full queue.
+- You can manually register a match with `/wuzzler register @teamap1 @teamap2 @teambp1 @teambp2`.
 
 ## Example Commands
 ```
@@ -53,4 +55,5 @@
 /wuzzler score a 10
 /wuzzler score b 8
 /wuzzler stats
+/wuzzler register @teamap1 @teamap2 @teambp1 @teambp2
 /wuzzler help

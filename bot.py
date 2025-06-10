@@ -91,8 +91,33 @@ def handle_help(respond):
         "• `/wuzzler score b <score>` — Set Team B's score and finalize match\n"
         "• `/wuzzler stats` — Show your current MMR\n"
         "• `/wuzzler help` — Show this help message\n"
+        "• `/wuzzler register @teamap1 @teamap2 @teambp1 @teambp2` — Declare a match with explicit users\n"
     )
     respond(msg)
+
+def handle_register(user_id, respond, text):
+    # Expected: /wuzzler register @teamap1 @teamap2 @teambp1 @teambp2
+    import re
+    mentions = re.findall(r'<@([A-Z0-9]+)>', text)
+    if len(mentions) != 4:
+        respond("Usage: /wuzzler register @teamap1 @teamap2 @teambp1 @teambp2")
+        return
+    team_a = [mentions[0], mentions[1]]
+    team_b = [mentions[2], mentions[3]]
+    # Set up the match
+    queue.active_match = {
+        'players': team_a + team_b,
+        'teams': {'A': team_a, 'B': team_b},
+        'scores': {'A': None, 'B': None}
+    }
+    msg = format_match_message(queue.active_match)
+    respond(f"Match registered!\n{msg}")
+    for p in team_a + team_b:
+        if not p.startswith("U_FAKE"):
+            try:
+                app.client.chat_postMessage(channel=p, text=f"You have been registered for a match!\n{msg}")
+            except Exception:
+                pass
 
 # --- Main Command Router ---
 @app.command("/wuzzler")
@@ -127,6 +152,8 @@ def handle_wuzzler_command(ack, respond, command):
             respond("Usage: /wuzzler score a <score> or /wuzzler score b <score>")
     elif text.startswith("a ") or text.startswith("b "):
         respond("Please use /wuzzler score a <score> or /wuzzler score b <score> instead.")
+    elif text.startswith("register"):
+        handle_register(user_id, respond, text)
     else:
         respond("Unknown command. Type `/wuzzler help` for usage.")
 
