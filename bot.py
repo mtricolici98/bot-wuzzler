@@ -241,6 +241,13 @@ def handle_result(user_id, respond, text):
         msg += f"<@{uid}>: {old} → {new} ({'+' if delta > 0 else ''}{delta})\n"
     respond(msg)
     logger.info(f"Result processed: {msg}")
+    # DM all real users except the one who registered the result
+    for uid in deltas:
+        if uid != user_id and not uid.startswith("U_FAKE"):
+            try:
+                app.client.chat_postMessage(channel=uid, text=msg)
+            except Exception as e:
+                logger.error(f"Failed to DM {uid}: {e}")
     queue.active_match = None
 
 def handle_history(user_id, respond):
